@@ -77,6 +77,7 @@ struct SynthTurbData
     amrex::Gpu::DeviceVector<double> vvel_d;
     amrex::Gpu::DeviceVector<double> wvel_d;
 
+
     // Indices of the two planes stored in the data arrays
     int ileft;
     int iright;
@@ -192,6 +193,9 @@ private:
     SynthTurbData m_turb_grid;
 
     std::unique_ptr<synth_turb::MeanProfile> m_wind_profile;
+
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h;
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag;
 
     std::string m_mean_wind_type{"ConstValue"};
     amrex::Real m_epsilon;

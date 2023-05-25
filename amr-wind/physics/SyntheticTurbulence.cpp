@@ -93,6 +93,60 @@ private:
     PowerLawOp m_op;
 };
 
+struct UserDefinedOp
+{
+    const amrex::Real m_hmin;
+    const amrex::Real m_hmax;
+    const amrex::Real m_deltah;
+    const int m_npts;
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h;
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag;
+
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real
+    operator()(amrex::Real height) const
+    {
+        amrex::Real val;
+        // Index of the profile point that is right below the height argument
+        int npt_l = std::floor(height / m_deltah);
+        amrex::Real h_l = m_prof_h[npt_l];
+
+        if (npt_l > m_npts - 2) {
+            val = m_prof_vmag[m_npts - 1];
+        } else if (npt_l < 0) {
+            val = m_prof_vmag[0];
+        } else {
+            val = m_prof_vmag[npt_l] +
+                  (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
+                      (height - h_l) / m_deltah;
+        }
+
+        return val;
+    }
+};
+
+class UserDefinedProfile : public MeanProfile
+{
+public:
+    UserDefinedProfile(
+        amrex::Real ref_vel,
+        amrex::Real hmin,
+        amrex::Real hmax,
+        amrex::Real deltah,
+        amrex::Gpu::DeviceVector<amrex::Real> prof_h,
+        amrex::Gpu::DeviceVector<amrex::Real> prof_vmag,
+        int npts,
+        int shear_dir)
+        : MeanProfile(ref_vel, shear_dir)
+        , m_op{hmin, hmax, deltah, npts, prof_h, prof_vmag}
+    {}
+
+    ~UserDefinedProfile() override = default;
+
+    UserDefinedOp device_instance() const { return m_op; }
+
+private:
+    UserDefinedOp m_op;
+};
 } // namespace synth_turb
 
 namespace {
@@ -426,6 +480,65 @@ SyntheticTurbulence::SyntheticTurbulence(const CFDSim& sim)
         umax /= wind_speed;
         m_wind_profile = std::make_unique<synth_turb::PowerLawProfile>(
             wind_speed, zref, alpha, shear_dir, zoffset, umin, umax);
+    } else if (mean_wind_type == "UserDefinedProfile") {
+        amrex::ParmParse pp_prof("UserDefinedProfile");
+
+        std::string prfl_file;
+        pp_prof.query("file_input", prfl_file);
+        amrex::Real zmin, zmax, deltah;
+        pp_prof.query("hmin", zmin);
+        pp_prof.query("hmax", zmax);
+        pp_prof.query("deltah", deltah);
+
+        std::ifstream pp_infile;
+        int n_pts;
+        pp_infile.open(prfl_file.c_str(), std::ios_base::in);
+        pp_infile >> n_pts;
+        amrex::Vector<amrex::Real> prof_h, prof_vmag, prof_u, prof_v, prof_w;
+
+        prof_h.resize(n_pts);
+        prof_u.resize(n_pts);
+        prof_v.resize(n_pts);
+        prof_w.resize(n_pts);
+        prof_vmag.resize(n_pts);
+
+        for (int i = 0; i < n_pts; i++) {
+            pp_infile >> prof_h[i] >> prof_u[i] >> prof_v[i] >> prof_w[i];
+        }
+
+        pp_infile.close();
+
+        for (int i = 0; i < n_pts; i++) {
+            prof_vmag[i] = std::sqrt(
+                prof_u[i] * prof_u[i] + prof_v[i] * prof_v[i] +
+                prof_w[i] * prof_w[i]);
+        }
+        amrex::Real vmag_start, vmag_stop, ref_vel;
+        vmag_start = prof_vmag[0];
+        vmag_stop = prof_vmag[n_pts - 1];
+
+        // This is calculated since the class MeanProfile requires a reference
+        // velocity. The definition here serves no mathematical purpose
+        ref_vel = 0.5 * (vmag_start + vmag_stop);
+
+        int shear_dir = 2;
+        pp_prof.query("direction", shear_dir);
+
+        m_prof_h.resize(n_pts);
+        m_prof_vmag.resize(n_pts);
+
+        // Host to device copy
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
+            m_prof_h.begin());
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
+            m_prof_vmag.begin());
+
+        m_wind_profile = std::make_unique<synth_turb::UserDefinedProfile>(
+            ref_vel, zmin, zmax, deltah, m_prof_h, m_prof_vmag, n_pts,
+            shear_dir);
+
     } else {
         amrex::Abort(
             "SyntheticTurbulence: invalid mean wind type specified = " +
@@ -542,6 +655,12 @@ void SyntheticTurbulence::update()
     } else if (m_mean_wind_type == "PowerLawProfile") {
         const auto* vfunc =
             dynamic_cast<synth_turb::PowerLawProfile*>(m_wind_profile.get());
+        if (vfunc != nullptr) {
+            update_impl(turb_grid, weights, vfunc->device_instance());
+        }
+    } else if (m_mean_wind_type == "UserDefinedProfile") {
+        const auto* vfunc =
+            dynamic_cast<synth_turb::UserDefinedProfile*>(m_wind_profile.get());
         if (vfunc != nullptr) {
             update_impl(turb_grid, weights, vfunc->device_instance());
         }

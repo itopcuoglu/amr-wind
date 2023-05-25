@@ -8,6 +8,7 @@
 #include "amr-wind/physics/udfs/LinearProfile.H"
 #include "amr-wind/physics/udfs/PowerLawProfile.H"
 #include "amr-wind/physics/udfs/BurggrafLid.H"
+#include "amr-wind/physics/udfs/UserDefinedProfile.H"
 
 namespace amr_wind::vel_bc {
 
@@ -28,6 +29,10 @@ void register_inflow_vel_dirichlet(
             mesh, time, InflowOp(field));
     } else if (inflow_udf == "BurggrafLid") {
         using InflowOp = BCOpCreator<udf::BurggrafLid, WallOp>;
+        field.register_fill_patch_op<FieldFillPatchOps<InflowOp>>(
+            mesh, time, InflowOp(field));
+    } else if (inflow_udf == "UserDefinedProfile") {
+        using InflowOp = BCOpCreator<udf::UserDefinedProfile, WallOp>;
         field.register_fill_patch_op<FieldFillPatchOps<InflowOp>>(
             mesh, time, InflowOp(field));
     } else {

@@ -5,4 +5,5 @@ target_sources(${amr_wind_lib_name}
   LinearProfile.cpp
   PowerLawProfile.cpp
   BurggrafLid.cpp
+  UserDefinedProfile.cpp
   )
