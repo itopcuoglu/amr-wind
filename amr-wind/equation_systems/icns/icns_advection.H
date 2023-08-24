@@ -115,6 +115,8 @@ struct AdvectionOp<ICNS, fvm::Godunov>
             godunov_scheme = godunov::scheme::WENOZ;
         } else if (amrex::toLower(godunov_type) == "central") {
             godunov_scheme = godunov::scheme::CENTRAL;
+        } else if (amrex::toLower(godunov_type) == "weno_z_central") {
+            godunov_scheme = godunov::scheme::WENOZ_CENTRAL;
         } else {
             amrex::Print()
                 << "For godunov_type select between plm, ppm, "
@@ -166,7 +168,8 @@ struct AdvectionOp<ICNS, fvm::Godunov>
             if ((godunov_scheme == godunov::scheme::PPM_NOLIM) ||
                 (godunov_scheme == godunov::scheme::WENOJS) ||
                 (godunov_scheme == godunov::scheme::WENOZ) ||
-                (godunov_scheme == godunov::scheme::CENTRAL)) {
+                (godunov_scheme == godunov::scheme::CENTRAL) ||
+                (godunov_scheme == godunov::scheme::WENOZ_CENTRAL)) {
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
@@ -256,6 +259,7 @@ struct AdvectionOp<ICNS, fvm::Godunov>
                                 true);
                             break;
                         }
+                        case godunov::scheme::WENOZ_CENTRAL:
                         case godunov::scheme::CENTRAL:
                         case godunov::scheme::WENOZ: {
                             godunov::predict_weno(
@@ -418,7 +422,8 @@ struct AdvectionOp<ICNS, fvm::Godunov>
                     // Only need interpolation of n+1/2 state to faces
                     if ((godunov_scheme == godunov::scheme::WENOJS) ||
                         (godunov_scheme == godunov::scheme::WENOZ) ||
-                        (godunov_scheme == godunov::scheme::CENTRAL)) {
+                        (godunov_scheme == godunov::scheme::CENTRAL) ||
+                        (godunov_scheme == godunov::scheme::WENOZ_CENTRAL)) {
                         amrex::FArrayBox tmpfab(
                             amrex::grow(bx, 1), ICNS::ndim * 14);
                         godunov::compute_fluxes_spatial(
@@ -438,7 +443,8 @@ struct AdvectionOp<ICNS, fvm::Godunov>
                     // These schemes are not in amrex-hydro yet
                     if ((godunov_scheme == godunov::scheme::PPM_NOLIM) ||
                         (godunov_scheme == godunov::scheme::WENOJS) ||
-                        (godunov_scheme == godunov::scheme::WENOZ)) {
+                        (godunov_scheme == godunov::scheme::WENOZ) ||
+                        (godunov_scheme == godunov::scheme::WENOZ_CENTRAL)) {
                         amrex::FArrayBox tmpfab(
                             amrex::grow(bx, 1), ICNS::ndim * 14);
                         godunov::compute_fluxes(
