@@ -26,13 +26,16 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     pp_infile.open(prfl_file.c_str(), std::ios_base::in);
     pp_infile >> npts;
     amrex::Vector<amrex::Real> prof_h, prof_u, prof_v, prof_w, prof_vec;
+
     prof_h.resize(npts);
     prof_u.resize(npts);
     prof_v.resize(npts);
     prof_w.resize(npts);
-    prof_vec.resize(3 * npts);
     m_op.prof_h.resize(npts);
     m_op.prof_vec.resize(3 * npts);
+    m_op.prof_h_d.resize(npts);
+    m_op.prof_vec_d.resize(3 * npts);
+
     m_op.npts = npts;
 
     int i;
@@ -42,26 +45,33 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     pp_infile.close();
 
     for (i = 0; i < npts; i++) {
-        prof_vec[i] = prof_u[i];
+        m_op.prof_h[i] = prof_h[i];
     }
 
     for (i = 0; i < npts; i++) {
-        prof_vec[i + 1 * npts] = prof_v[i];
+        m_op.prof_vec[i] = prof_u[i];
     }
 
     for (i = 0; i < npts; i++) {
-        prof_vec[i + 2 * npts] = prof_w[i];
+        m_op.prof_vec[i + 1 * npts] = prof_v[i];
     }
 
-    AMREX_ALWAYS_ASSERT(prof_vec.size() == AMREX_SPACEDIM * npts);
+    for (i = 0; i < npts; i++) {
+        m_op.prof_vec[i + 2 * npts] = prof_w[i];
+    }
+
+    AMREX_ALWAYS_ASSERT(m_op.prof_vec.size() == AMREX_SPACEDIM * npts);
 
     amrex::Gpu::copy(
-        amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
-        m_op.prof_h.begin());
+        amrex::Gpu::hostToDevice, m_op.prof_h.begin(), m_op.prof_h.end(),
+        m_op.prof_h_d.begin());
 
     amrex::Gpu::copy(
-        amrex::Gpu::hostToDevice, prof_vec.begin(), prof_vec.end(),
-        m_op.prof_vec.begin());
+        amrex::Gpu::hostToDevice, m_op.prof_vec.begin(), m_op.prof_vec.end(),
+        m_op.prof_vec_d.begin());
+
+    m_op.h_ptr = m_op.prof_h_d.data();
+    m_op.v_ptr = m_op.prof_vec_d.data();
 }
 
 } // namespace amr_wind::udf

@@ -95,31 +95,44 @@ private:
 
 struct UserDefinedOp
 {
-    const amrex::Real m_hmin;
-    const amrex::Real m_hmax;
-    const amrex::Real m_deltah;
-    const int m_npts;
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h;
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag;
+    // const amrex::Real m_hmin;
+    // const amrex::Real m_hmax;
+    // const amrex::Real m_deltah;
+    // const int m_npts;
+    // amrex::Real m_hmin;
+    // amrex::Real m_hmax;
+    amrex::Real m_deltah;
+    int m_npts;
+    // amrex::Vector<amrex::Real> m_prof_h;
+    // amrex::Vector<amrex::Real> m_prof_vmag;
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h_d;
+    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag_d;
+    amrex::Real* m_hptr;
+    amrex::Real* m_vptr;
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real
     operator()(amrex::Real height) const
     {
         amrex::Real val;
         // Index of the profile point that is right below the height argument
-        int npt_l = std::floor(height / m_deltah);
-        amrex::Real h_l = m_prof_h[npt_l];
+        int npt_l = static_cast<int>(std::floor(height / m_deltah));
+        // amrex::Real h_l = m_prof_h[npt_l];
+        amrex::Real h_l = m_hptr[npt_l];
 
         if (npt_l > m_npts - 2) {
-            val = m_prof_vmag[m_npts - 1];
+            // val = m_prof_vmag[m_npts - 1];
+            val = m_vptr[m_npts - 1];
         } else if (npt_l < 0) {
-            val = m_prof_vmag[0];
+            // val = m_prof_vmag[0];
+            val = m_vptr[0];
         } else {
-            val = m_prof_vmag[npt_l] +
-                  (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
-                      (height - h_l) / m_deltah;
+            // val = m_prof_vmag[npt_l] +
+            //       (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
+            //           (height - h_l) / m_deltah;
+            val = m_vptr[npt_l] + (m_vptr[npt_l + 1] - m_vptr[npt_l]) *
+                                      (height - h_l) / m_deltah;
         }
-
+        // amrex::Print() << "h is "<<height<< " val is " << val << std::endl;
         return val;
     }
 };
@@ -132,13 +145,46 @@ public:
         amrex::Real hmin,
         amrex::Real hmax,
         amrex::Real deltah,
-        amrex::Gpu::DeviceVector<amrex::Real> prof_h,
-        amrex::Gpu::DeviceVector<amrex::Real> prof_vmag,
+        amrex::Vector<amrex::Real> prof_h,
+        amrex::Vector<amrex::Real> prof_vmag,
+        // amrex::Gpu::DeviceVector<amrex::Real> prof_h_d,
+        // amrex::Gpu::DeviceVector<amrex::Real> prof_vmag_d,
         int npts,
         int shear_dir)
-        : MeanProfile(ref_vel, shear_dir)
-        , m_op{hmin, hmax, deltah, npts, prof_h, prof_vmag}
-    {}
+        : MeanProfile(ref_vel, shear_dir), m_op{}
+    //, m_op{
+    //      hmin,
+    //      hmax,
+    //      deltah,
+    //      npts,
+    //      prof_h,
+    //      prof_vmag,
+    //      prof_h_d,
+    //      prof_vmag_d,
+    //      prof_h_d.data(),
+    //      prof_vmag_d.data()}
+    {
+        // prof_h_d.resize(npts);
+        // prof_vmag_d.resize(npts);
+
+        // m_op.m_hmin=hmin;
+        // m_op.m_hmax=hmax;
+        m_op.m_deltah = deltah;
+        m_op.m_npts = npts;
+
+        m_op.m_prof_h_d.resize(npts);
+        m_op.m_prof_vmag_d.resize(npts);
+
+        // Host to device copy
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
+            m_op.m_prof_h_d.begin());
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
+            m_op.m_prof_vmag_d.begin());
+        m_op.m_hptr = m_op.m_prof_h_d.data();
+        m_op.m_vptr = m_op.m_prof_vmag_d.data();
+    }
 
     ~UserDefinedProfile() override = default;
 
@@ -524,20 +570,22 @@ SyntheticTurbulence::SyntheticTurbulence(const CFDSim& sim)
         int shear_dir = 2;
         pp_prof.query("direction", shear_dir);
 
-        m_prof_h.resize(n_pts);
-        m_prof_vmag.resize(n_pts);
+        // m_prof_h.resize(n_pts);
+        // m_prof_vmag.resize(n_pts);
 
         // Host to device copy
-        amrex::Gpu::copy(
-            amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
-            m_prof_h.begin());
-        amrex::Gpu::copy(
-            amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
-            m_prof_vmag.begin());
+        // amrex::Gpu::copy(
+        //    amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
+        //    m_prof_h.begin());
+        // amrex::Gpu::copy(
+        //    amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
+        //    m_prof_vmag.begin());
 
+        // m_wind_profile = std::make_unique<synth_turb::UserDefinedProfile>(
+        //     ref_vel, zmin, zmax, deltah, prof_h, prof_vmag, prof_h_d,
+        //     prof_vmag_d, n_pts, shear_dir);
         m_wind_profile = std::make_unique<synth_turb::UserDefinedProfile>(
-            ref_vel, zmin, zmax, deltah, m_prof_h, m_prof_vmag, n_pts,
-            shear_dir);
+            ref_vel, zmin, zmax, deltah, prof_h, prof_vmag, n_pts, shear_dir);
 
     } else {
         amrex::Abort(
