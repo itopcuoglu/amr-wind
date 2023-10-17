@@ -17,8 +17,6 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     amrex::ParmParse pp("UserDefinedProfile");
     pp.query("file_input", prfl_file);
     pp.query("direction", m_op.idir);
-    pp.query("hmin", m_op.hmin);
-    pp.query("hmax", m_op.hmax);
     pp.query("deltah", m_op.deltah);
 
     std::ifstream pp_infile;
@@ -31,10 +29,10 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     prof_u.resize(npts);
     prof_v.resize(npts);
     prof_w.resize(npts);
-    m_op.prof_h.resize(npts);
-    m_op.prof_vec.resize(3 * npts);
-    m_op.prof_h_d.resize(npts);
-    m_op.prof_vec_d.resize(3 * npts);
+    //m_op.prof_h.resize(npts);
+    //m_op.prof_vec.resize(3 * npts);
+    //m_op.prof_h_d.resize(npts);
+    //m_op.prof_vec_d.resize(3 * npts);
 
     m_op.npts = npts;
 
@@ -49,19 +47,22 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     }
 
     for (i = 0; i < npts; i++) {
-        m_op.prof_vec[i] = prof_u[i];
+        //m_op.prof_vec[i] = prof_u[i];
+        m_op.prof_vel[i] = prof_u[i];
     }
 
     for (i = 0; i < npts; i++) {
-        m_op.prof_vec[i + 1 * npts] = prof_v[i];
+        //m_op.prof_vec[i + 1 * npts] = prof_v[i];
+        m_op.prof_vel[i + 1 * npts] = prof_v[i];
     }
 
     for (i = 0; i < npts; i++) {
-        m_op.prof_vec[i + 2 * npts] = prof_w[i];
+        //m_op.prof_vec[i + 2 * npts] = prof_w[i];
+        m_op.prof_vel[i + 2 * npts] = prof_w[i];
     }
 
-    AMREX_ALWAYS_ASSERT(m_op.prof_vec.size() == AMREX_SPACEDIM * npts);
-
+    //AMREX_ALWAYS_ASSERT(m_op.prof_vec.size() == AMREX_SPACEDIM * npts);
+	/*
     amrex::Gpu::copy(
         amrex::Gpu::hostToDevice, m_op.prof_h.begin(), m_op.prof_h.end(),
         m_op.prof_h_d.begin());
@@ -69,9 +70,13 @@ UserDefinedProfile::UserDefinedProfile(const Field& fld)
     amrex::Gpu::copy(
         amrex::Gpu::hostToDevice, m_op.prof_vec.begin(), m_op.prof_vec.end(),
         m_op.prof_vec_d.begin());
-
-    m_op.h_ptr = m_op.prof_h_d.data();
-    m_op.v_ptr = m_op.prof_vec_d.data();
+	amrex::Print()<<"DOES THIS HAPPEN?"<<std::endl;
+	amrex::Real* h_ptr=m_op.prof_h_d.data();
+	amrex::Real* v_ptr=m_op.prof_vec_d.data();
+	//amrex::Print()<<"hptr "<<h_ptr<<" vptr "<<v_ptr<<std::endl;
+	m_op.h_ptr=h_ptr;
+	m_op.v_ptr=v_ptr;
+	*/
 }
 
 } // namespace amr_wind::udf

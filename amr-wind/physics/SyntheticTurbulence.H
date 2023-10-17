@@ -77,7 +77,6 @@ struct SynthTurbData
     amrex::Gpu::DeviceVector<double> vvel_d;
     amrex::Gpu::DeviceVector<double> wvel_d;
 
-
     // Indices of the two planes stored in the data arrays
     int ileft;
     int iright;

@@ -19,10 +19,17 @@ struct UserDefinedProfile
         amrex::Real hmax;
         int npts;
         amrex::Real deltah;
-	amrex::Real* h_ptr;
-	amrex::Real* v_ptr;
-	amrex::Vector<amrex::Real> prof_h, prof_vec;
-        amrex::Gpu::DeviceVector<amrex::Real> prof_h_d, prof_vec_d;
+	//amrex::Real prof_h[npts];
+	//amrex::Real prof_vel[npts];
+	amrex::Real prof_h[256];
+	amrex::Real prof_vel[256];
+        //amrex::Vector<amrex::Real> prof_h, prof_vec;
+        //amrex::Gpu::DeviceVector<amrex::Real> prof_h_d, prof_vec_d;
+	//amrex::Real* h_ptr;
+	//amrex::Real* v_ptr;
+	//amrex::Real* h_ptr=prof_h_d.data();
+	//amrex::Real* v_ptr=prof_vec_d.data();
+
 
         AMREX_GPU_DEVICE
         inline void operator()(
@@ -38,21 +45,33 @@ struct UserDefinedProfile
             const auto* problo = geom.ProbLo();
             const auto* dx = geom.CellSize();
             const auto zco = problo[idir] + (iv[idir] + 0.5) * dx[idir];
+            //const amrex::Real* h_ptr = prof_h_d.data();
+            //const amrex::Real* v_ptr = prof_vec_d.data();
 
+	//amrex::Print()<<"d hptr "<<h_ptr<< " d vptr "<<v_ptr<<std::endl;
+	//amrex::Abort();
             amrex::Real val;
             int npt_l = static_cast<int>(std::floor(zco / deltah));
-            amrex::Real h_l = h_ptr[npt_l];
+            //amrex::Real h_l = h_ptr[npt_l];
+            amrex::Real h_l = prof_h[npt_l];
 
             if (npt_l > npts - 2) {
-                val = v_ptr[npts - 1 + npts * comp];
+                //val = v_ptr[npts - 1 + npts * comp];
+                val = prof_vel[npts - 1 + npts * comp];
             } else if (npt_l < 0) {
-                val = v_ptr[0 + npts * comp];
+                //val = v_ptr[0 + npts * comp];
+                val = prof_vel[0 + npts * comp];
             } else {
-                val = v_ptr[npt_l + npts * comp] +
-                      (v_ptr[npt_l + 1 + npts * comp] -
-                       v_ptr[npt_l + npts * comp]) *
+                //val = v_ptr[npt_l + npts * comp] +
+                //      (v_ptr[npt_l + 1 + npts * comp] -
+                //       v_ptr[npt_l + npts * comp]) *
+                //          (zco - h_l) / deltah;
+                val = prof_vel[npt_l + npts * comp] +
+                      (prof_vel[npt_l + 1 + npts * comp] -
+                       prof_vel[npt_l + npts * comp]) *
                           (zco - h_l) / deltah;
             }
+
             field(iv[0], iv[1], iv[2], dcomp + comp) = val;
         }
     };
