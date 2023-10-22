@@ -194,9 +194,6 @@ private:
 
     std::unique_ptr<synth_turb::MeanProfile> m_wind_profile;
 
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h;
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag;
-
     std::string m_mean_wind_type{"ConstValue"};
     amrex::Real m_epsilon;
     amrex::Real m_gauss_scaling;

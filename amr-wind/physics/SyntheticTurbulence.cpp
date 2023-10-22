@@ -95,44 +95,29 @@ private:
 
 struct UserDefinedOp
 {
-    // const amrex::Real m_hmin;
-    // const amrex::Real m_hmax;
-    // const amrex::Real m_deltah;
-    // const int m_npts;
-    // amrex::Real m_hmin;
-    // amrex::Real m_hmax;
-    amrex::Real m_deltah;
-    int m_npts;
-    // amrex::Vector<amrex::Real> m_prof_h;
-    // amrex::Vector<amrex::Real> m_prof_vmag;
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_h_d;
-    amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag_d;
-    amrex::Real* m_hptr;
-    amrex::Real* m_vptr;
+    const amrex::Real m_deltah;
+    const int m_npts;
+    const amrex::Gpu::DeviceVector<amrex::Real>* m_prof_h_d;
+    const amrex::Gpu::DeviceVector<amrex::Real>* m_prof_vmag_d;
+    const amrex::Real* m_hptr;
+    const amrex::Real* m_vptr;
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real
     operator()(amrex::Real height) const
     {
         amrex::Real val;
-        // Index of the profile point that is right below the height argument
+
         int npt_l = static_cast<int>(std::floor(height / m_deltah));
-        // amrex::Real h_l = m_prof_h[npt_l];
         amrex::Real h_l = m_hptr[npt_l];
 
         if (npt_l > m_npts - 2) {
-            // val = m_prof_vmag[m_npts - 1];
             val = m_vptr[m_npts - 1];
         } else if (npt_l < 0) {
-            // val = m_prof_vmag[0];
             val = m_vptr[0];
         } else {
-            // val = m_prof_vmag[npt_l] +
-            //       (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
-            //           (height - h_l) / m_deltah;
             val = m_vptr[npt_l] + (m_vptr[npt_l + 1] - m_vptr[npt_l]) *
                                       (height - h_l) / m_deltah;
         }
-        // amrex::Print() << "h is "<<height<< " val is " << val << std::endl;
         return val;
     }
 };
@@ -140,51 +125,16 @@ struct UserDefinedOp
 class UserDefinedProfile : public MeanProfile
 {
 public:
-    UserDefinedProfile(
-        amrex::Real ref_vel,
-        amrex::Real hmin,
-        amrex::Real hmax,
-        amrex::Real deltah,
-        amrex::Vector<amrex::Real> prof_h,
-        amrex::Vector<amrex::Real> prof_vmag,
-        // amrex::Gpu::DeviceVector<amrex::Real> prof_h_d,
-        // amrex::Gpu::DeviceVector<amrex::Real> prof_vmag_d,
-        int npts,
-        int shear_dir)
-        : MeanProfile(ref_vel, shear_dir), m_op{}
-    //, m_op{
-    //      hmin,
-    //      hmax,
-    //      deltah,
-    //      npts,
-    //      prof_h,
-    //      prof_vmag,
-    //      prof_h_d,
-    //      prof_vmag_d,
-    //      prof_h_d.data(),
-    //      prof_vmag_d.data()}
-    {
-        // prof_h_d.resize(npts);
-        // prof_vmag_d.resize(npts);
-
-        // m_op.m_hmin=hmin;
-        // m_op.m_hmax=hmax;
-        m_op.m_deltah = deltah;
-        m_op.m_npts = npts;
-
-        m_op.m_prof_h_d.resize(npts);
-        m_op.m_prof_vmag_d.resize(npts);
-
-        // Host to device copy
-        amrex::Gpu::copy(
-            amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
-            m_op.m_prof_h_d.begin());
-        amrex::Gpu::copy(
-            amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
-            m_op.m_prof_vmag_d.begin());
-        m_op.m_hptr = m_op.m_prof_h_d.data();
-        m_op.m_vptr = m_op.m_prof_vmag_d.data();
-    }
+    UserDefinedProfile(const amrex::Real ref_vel,
+                       const amrex::Real deltah,
+                       const int npts,
+                       amrex::Gpu::DeviceVector<amrex::Real> prof_h,
+                       amrex::Gpu::DeviceVector<amrex::Real> prof_vmag,
+                       int shear_dir)
+        : MeanProfile(ref_vel, shear_dir)
+        , m_op{deltah,     npts,          &prof_h,
+               &prof_vmag, prof_h.data(), prof_vmag.data()}
+    {}
 
     ~UserDefinedProfile() override = default;
 
@@ -531,9 +481,7 @@ SyntheticTurbulence::SyntheticTurbulence(const CFDSim& sim)
 
         std::string prfl_file;
         pp_prof.query("file_input", prfl_file);
-        amrex::Real zmin, zmax, deltah;
-        pp_prof.query("hmin", zmin);
-        pp_prof.query("hmax", zmax);
+        amrex::Real deltah;
         pp_prof.query("deltah", deltah);
 
         std::ifstream pp_infile;
@@ -541,12 +489,16 @@ SyntheticTurbulence::SyntheticTurbulence(const CFDSim& sim)
         pp_infile.open(prfl_file.c_str(), std::ios_base::in);
         pp_infile >> n_pts;
         amrex::Vector<amrex::Real> prof_h, prof_vmag, prof_u, prof_v, prof_w;
+        amrex::Gpu::DeviceVector<amrex::Real> prof_h_d, prof_vmag_d;
 
         prof_h.resize(n_pts);
         prof_u.resize(n_pts);
         prof_v.resize(n_pts);
         prof_w.resize(n_pts);
         prof_vmag.resize(n_pts);
+
+        prof_h_d.resize(n_pts);
+        prof_vmag_d.resize(n_pts);
 
         for (int i = 0; i < n_pts; i++) {
             pp_infile >> prof_h[i] >> prof_u[i] >> prof_v[i] >> prof_w[i];
@@ -563,29 +515,21 @@ SyntheticTurbulence::SyntheticTurbulence(const CFDSim& sim)
         vmag_start = prof_vmag[0];
         vmag_stop = prof_vmag[n_pts - 1];
 
-        // This is calculated since the class MeanProfile requires a reference
-        // velocity. The definition here serves no mathematical purpose
         ref_vel = 0.5 * (vmag_start + vmag_stop);
 
         int shear_dir = 2;
         pp_prof.query("direction", shear_dir);
 
-        // m_prof_h.resize(n_pts);
-        // m_prof_vmag.resize(n_pts);
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
+            prof_h_d.begin());
 
-        // Host to device copy
-        // amrex::Gpu::copy(
-        //    amrex::Gpu::hostToDevice, prof_h.begin(), prof_h.end(),
-        //    m_prof_h.begin());
-        // amrex::Gpu::copy(
-        //    amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
-        //    m_prof_vmag.begin());
+        amrex::Gpu::copy(
+            amrex::Gpu::hostToDevice, prof_vmag.begin(), prof_vmag.end(),
+            prof_vmag_d.begin());
 
-        // m_wind_profile = std::make_unique<synth_turb::UserDefinedProfile>(
-        //     ref_vel, zmin, zmax, deltah, prof_h, prof_vmag, prof_h_d,
-        //     prof_vmag_d, n_pts, shear_dir);
         m_wind_profile = std::make_unique<synth_turb::UserDefinedProfile>(
-            ref_vel, zmin, zmax, deltah, prof_h, prof_vmag, n_pts, shear_dir);
+            ref_vel, deltah, n_pts, prof_h_d, prof_vmag_d, shear_dir);
 
     } else {
         amrex::Abort(
