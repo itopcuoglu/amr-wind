@@ -101,6 +101,8 @@ struct UserDefinedOp
     const int m_npts;
     amrex::Gpu::DeviceVector<amrex::Real> m_prof_h;
     amrex::Gpu::DeviceVector<amrex::Real> m_prof_vmag;
+    amrex::Real* h_ptr = m_prof_h.data();
+    amrex::Real* v_ptr = m_prof_vmag.data();
 
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real
     operator()(amrex::Real height) const
@@ -108,16 +110,21 @@ struct UserDefinedOp
         amrex::Real val;
         // Index of the profile point that is right below the height argument
         int npt_l = std::floor(height / m_deltah);
-        amrex::Real h_l = m_prof_h[npt_l];
+        // amrex::Real h_l = m_prof_h[npt_l];
+        amrex::Real h_l = h_ptr[npt_l];
 
         if (npt_l > m_npts - 2) {
-            val = m_prof_vmag[m_npts - 1];
+            // val = m_prof_vmag[m_npts - 1];
+            val = v_ptr[m_npts - 1];
         } else if (npt_l < 0) {
-            val = m_prof_vmag[0];
+            // val = m_prof_vmag[0];
+            val = v_ptr[0];
         } else {
-            val = m_prof_vmag[npt_l] +
-                  (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
-                      (height - h_l) / m_deltah;
+            // val = m_prof_vmag[npt_l] +
+            //       (m_prof_vmag[npt_l + 1] - m_prof_vmag[npt_l]) *
+            //           (height - h_l) / m_deltah;
+            val = v_ptr[npt_l] +
+                  (v_ptr[npt_l + 1] - v_ptr[npt_l]) * (height - h_l) / m_deltah;
         }
 
         return val;

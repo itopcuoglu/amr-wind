@@ -36,18 +36,27 @@ struct UserDefinedProfile
             const auto* dx = geom.CellSize();
             const auto zco = problo[idir] + (iv[idir] + 0.5) * dx[idir];
 
+            const amrex::Real* h_ptr = prof_h.data();
+            const amrex::Real* v_ptr = prof_vec.data();
             amrex::Real val;
             int npt_l = std::floor(zco / deltah);
-            amrex::Real h_l = prof_h[npt_l];
+            // amrex::Real h_l = prof_h[npt_l];
+            amrex::Real h_l = h_ptr[npt_l];
 
             if (npt_l > npts - 2) {
-                val = prof_vec[npts - 1 + npts * comp];
+                // val = prof_vec[npts - 1 + npts * comp];
+                val = v_ptr[npts - 1 + npts * comp];
             } else if (npt_l < 0) {
-                val = prof_vec[0 + npts * comp];
+                // val = prof_vec[0 + npts * comp];
+                val = v_ptr[0 + npts * comp];
             } else {
-                val = prof_vec[npt_l + npts * comp] +
-                      (prof_vec[npt_l + 1 + npts * comp] -
-                       prof_vec[npt_l + npts * comp]) *
+                // val = prof_vec[npt_l + npts * comp] +
+                //       (prof_vec[npt_l + 1 + npts * comp] -
+                //        prof_vec[npt_l + npts * comp]) *
+                //           (zco - h_l) / deltah;
+                val = v_ptr[npt_l + npts * comp] +
+                      (v_ptr[npt_l + 1 + npts * comp] -
+                       v_ptr[npt_l + npts * comp]) *
                           (zco - h_l) / deltah;
             }
 
