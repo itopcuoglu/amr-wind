@@ -88,6 +88,11 @@ struct AdvectionOp<
         const auto& src_term = fields.src_term;
         // cppcheck-suppress constVariableReference
         auto& conv_term = fields.conv_term;
+        // if state is NPH, then n and n+1 are known, and only spatial
+        // extrapolation is performed
+        bool only_spatial =
+            (fstate == FieldState::NPH ||
+             godunov_scheme == godunov::scheme::CENTRAL);
         const auto& dof_field = fields.field.state(fstate);
 
         auto flux_x =
@@ -137,56 +142,82 @@ struct AdvectionOp<
                                 rho_arr(i, j, k) * tra_arr(i, j, k, n);
                         });
                 }
+                if (only_spatial) {
+                    if ((godunov_scheme == godunov::scheme::WENOJS) ||
+                        (godunov_scheme == godunov::scheme::WENOZ) ||
+                        (godunov_scheme == godunov::scheme::CENTRAL) ||
+                        (godunov_scheme == godunov::scheme::WENOZ_CENTRAL) {
+                        amrex::FArrayBox tmpfab(
+                            amrex::grow(bx, 1), PDE::ndim * 14);
 
-                if ((godunov_scheme == godunov::scheme::PPM_NOLIM) ||
-                    (godunov_scheme == godunov::scheme::WENOJS) ||
-                    (godunov_scheme == godunov::scheme::WENOZ)) {
-                    amrex::FArrayBox tmpfab(amrex::grow(bx, 1), PDE::ndim * 14);
-
-                    godunov::compute_fluxes(
-                        lev, bx, PDE::ndim, (*flux_x)(lev).array(mfi),
-                        (*flux_y)(lev).array(mfi), (*flux_z)(lev).array(mfi),
-                        (PDE::multiply_rho ? rhotrac : tra_arr),
-                        u_mac(lev).const_array(mfi),
-                        v_mac(lev).const_array(mfi),
-                        w_mac(lev).const_array(mfi),
-                        src_term(lev).const_array(mfi),
-                        dof_field.bcrec_device().data(), iconserv.data(),
-                        tmpfab.dataPtr(), geom, dt, godunov_scheme);
-                } else if (
-                    (godunov_scheme == godunov::scheme::PPM) ||
-                    (godunov_scheme == godunov::scheme::PLM) ||
-                    (godunov_scheme == godunov::scheme::BDS)) {
-                    amrex::FArrayBox tmpfab(amrex::grow(bx, 1), 1);
-                    tmpfab.setVal<amrex::RunOn::Device>(0.0);
-                    const auto& divu = tmpfab.array();
-                    const bool is_velocity = false;
-                    const bool known_edge_state = false;
-                    const bool godunov_use_ppm =
-                        godunov_scheme == godunov::scheme::PPM;
-                    HydroUtils::ComputeFluxesOnBoxFromState(
-                        bx, PDE::ndim, mfi,
-                        (PDE::multiply_rho ? rhotrac : tra_arr),
-                        AMREX_D_DECL(
-                            (*flux_x)(lev).array(mfi),
+                        godunov::compute_fluxes_spatial(
+                            lev, bx, PDE::ndim, (*flux_x)(lev).array(mfi),
                             (*flux_y)(lev).array(mfi),
-                            (*flux_z)(lev).array(mfi)),
-                        AMREX_D_DECL(
-                            (*face_x)(lev).array(mfi),
-                            (*face_y)(lev).array(mfi),
-                            (*face_z)(lev).array(mfi)),
-                        known_edge_state,
-                        AMREX_D_DECL(
+                            (*flux_z)(lev).array(mfi),
+                            (PDE::multiply_rho ? rhotrac : tra_arr),
                             u_mac(lev).const_array(mfi),
                             v_mac(lev).const_array(mfi),
-                            w_mac(lev).const_array(mfi)),
-                        divu, src_term(lev).const_array(mfi), geom[lev], dt,
-                        dof_field.bcrec(), dof_field.bcrec_device().data(),
-                        iconserv.data(), godunov_use_ppm,
-                        godunov_use_forces_in_trans, is_velocity,
-                        fluxes_are_area_weighted, advection_type);
+                            w_mac(lev).const_array(mfi),
+                            src_term(lev).const_array(mfi),
+                            dof_field.bcrec_device().data(), iconserv.data(),
+                            tmpfab.dataPtr(), geom, godunov_scheme);
+                    } else {
+                        amrex::Abort(
+                            "Invalid godunov scheme for non-linear iterations");
+                    }
                 } else {
-                    amrex::Abort("Invalid godunov scheme");
+                    if ((godunov_scheme == godunov::scheme::PPM_NOLIM) ||
+                        (godunov_scheme == godunov::scheme::WENOJS) ||
+                        (godunov_scheme == godunov::scheme::WENOZ)) {
+                        amrex::FArrayBox tmpfab(
+                            amrex::grow(bx, 1), PDE::ndim * 14);
+
+                        godunov::compute_fluxes(
+                            lev, bx, PDE::ndim, (*flux_x)(lev).array(mfi),
+                            (*flux_y)(lev).array(mfi),
+                            (*flux_z)(lev).array(mfi),
+                            (PDE::multiply_rho ? rhotrac : tra_arr),
+                            u_mac(lev).const_array(mfi),
+                            v_mac(lev).const_array(mfi),
+                            w_mac(lev).const_array(mfi),
+                            src_term(lev).const_array(mfi),
+                            dof_field.bcrec_device().data(), iconserv.data(),
+                            tmpfab.dataPtr(), geom, dt, godunov_scheme);
+                    } else if (
+                        (godunov_scheme == godunov::scheme::PPM) ||
+                        (godunov_scheme == godunov::scheme::PLM) ||
+                        (godunov_scheme == godunov::scheme::BDS)) {
+                        amrex::FArrayBox tmpfab(amrex::grow(bx, 1), 1);
+                        tmpfab.setVal<amrex::RunOn::Device>(0.0);
+                        const auto& divu = tmpfab.array();
+                        const bool is_velocity = false;
+                        const bool known_edge_state = false;
+                        const bool godunov_use_ppm =
+                            godunov_scheme == godunov::scheme::PPM;
+                        HydroUtils::ComputeFluxesOnBoxFromState(
+                            bx, PDE::ndim, mfi,
+                            (PDE::multiply_rho ? rhotrac : tra_arr),
+                            AMREX_D_DECL(
+                                (*flux_x)(lev).array(mfi),
+                                (*flux_y)(lev).array(mfi),
+                                (*flux_z)(lev).array(mfi)),
+                            AMREX_D_DECL(
+                                (*face_x)(lev).array(mfi),
+                                (*face_y)(lev).array(mfi),
+                                (*face_z)(lev).array(mfi)),
+                            known_edge_state,
+                            AMREX_D_DECL(
+                                u_mac(lev).const_array(mfi),
+                                v_mac(lev).const_array(mfi),
+                                w_mac(lev).const_array(mfi)),
+                            divu, src_term(lev).const_array(mfi), geom[lev], dt,
+                            dof_field.bcrec(), dof_field.bcrec_device().data(),
+                            iconserv.data(), godunov_use_ppm,
+                            godunov_use_forces_in_trans, is_velocity,
+                            fluxes_are_area_weighted, advection_type);
+                    } else {
+                        amrex::Abort("Invalid godunov scheme");
+                    }
                 }
                 amrex::Gpu::streamSynchronize();
             }
