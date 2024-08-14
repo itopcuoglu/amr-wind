@@ -146,7 +146,7 @@ struct AdvectionOp<
                     if ((godunov_scheme == godunov::scheme::WENOJS) ||
                         (godunov_scheme == godunov::scheme::WENOZ) ||
                         (godunov_scheme == godunov::scheme::CENTRAL) ||
-                        (godunov_scheme == godunov::scheme::WENOZ_CENTRAL) {
+                        (godunov_scheme == godunov::scheme::WENOZ_CENTRAL)) {
                         amrex::FArrayBox tmpfab(
                             amrex::grow(bx, 1), PDE::ndim * 14);
 
@@ -158,7 +158,6 @@ struct AdvectionOp<
                             u_mac(lev).const_array(mfi),
                             v_mac(lev).const_array(mfi),
                             w_mac(lev).const_array(mfi),
-                            src_term(lev).const_array(mfi),
                             dof_field.bcrec_device().data(), iconserv.data(),
                             tmpfab.dataPtr(), geom, godunov_scheme);
                     } else {
