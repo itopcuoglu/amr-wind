@@ -263,6 +263,58 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_pred_x(
     }
 }
 
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_calculate_x(
+    const int i,
+    const int j,
+    const int k,
+    const int n,
+    const amrex::Real v_ad,
+    const amrex::Array4<const amrex::Real>& S,
+    const amrex::Array4<amrex::Real>& Im,
+    const amrex::Array4<amrex::Real>& Ip,
+    const amrex::BCRec& bc,
+    const int domlo,
+    const int domhi,
+    const bool weno_js)
+{
+
+    using namespace amrex;
+
+    constexpr amrex::Real small_vel = 1e-10;
+
+    amrex::Real sm2 = S(i - 2, j, k, n);
+    amrex::Real sm1 = S(i - 1, j, k, n);
+    amrex::Real s0 = S(i, j, k, n);
+    amrex::Real sp1 = S(i + 1, j, k, n);
+    amrex::Real sp2 = S(i + 2, j, k, n);
+
+    // right of i-1/2
+    amrex::Real sedge1 = weno5(sp2, sp1, s0, sm1, sm2, weno_js); // NOLINT
+    // left of i+1/2
+    amrex::Real sedge2 = weno5(sm2, sm1, s0, sp1, sp2, weno_js); // NOLINT
+
+    amrex::Real sm = sedge1;
+    amrex::Real sp = sedge2;
+
+    Godunov_weno_xbc(
+        i, j, k, n, sm, sp, sedge1, sedge2, S, bc.lo(0), bc.hi(0), domlo,
+        domhi);
+
+    amrex::Real s6 = 6.0 * s0 - 3.0 * (sm + sp);
+
+    // upwind
+    if (v_ad > small_vel) {
+        Ip(i, j, k, n) = sp;
+        Im(i, j, k, n) = S(i, j, k, n);
+    } else if (v_ad < -small_vel) {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = sm;
+    } else {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = S(i, j, k, n);
+    }
+}
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_pred_y(
     const int i,
     const int j,
@@ -318,6 +370,56 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_pred_y(
     }
 }
 
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_calculate_y(
+    const int i,
+    const int j,
+    const int k,
+    const int n,
+    const amrex::Real v_ad,
+    const amrex::Array4<const amrex::Real>& S,
+    const amrex::Array4<amrex::Real>& Im,
+    const amrex::Array4<amrex::Real>& Ip,
+    const amrex::BCRec& bc,
+    const int domlo,
+    const int domhi,
+    const bool weno_js)
+{
+    using namespace amrex;
+
+    constexpr amrex::Real small_vel = 1e-10;
+
+    amrex::Real sm2 = S(i, j - 2, k, n);
+    amrex::Real sm1 = S(i, j - 1, k, n);
+    amrex::Real s0 = S(i, j, k, n);
+    amrex::Real sp1 = S(i, j + 1, k, n);
+    amrex::Real sp2 = S(i, j + 2, k, n);
+
+    // right of j-1/2
+    amrex::Real sedge1 = weno5(sp2, sp1, s0, sm1, sm2, weno_js); // NOLINT
+    // left of j+1/2
+    amrex::Real sedge2 = weno5(sm2, sm1, s0, sp1, sp2, weno_js); // NOLINT
+
+    amrex::Real sm = sedge1;
+    amrex::Real sp = sedge2;
+
+    Godunov_weno_ybc(
+        i, j, k, n, sm, sp, sedge1, sedge2, S, bc.lo(1), bc.hi(1), domlo,
+        domhi);
+
+    amrex::Real s6 = 6.0 * s0 - 3.0 * (sm + sp);
+
+    if (v_ad > small_vel) {
+        Ip(i, j, k, n) = sp;
+        Im(i, j, k, n) = S(i, j, k, n);
+    } else if (v_ad < -small_vel) {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = sm;
+    } else {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = S(i, j, k, n);
+    }
+}
+
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_pred_z(
     const int i,
     const int j,
@@ -367,6 +469,56 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_pred_z(
         Ip(i, j, k, n) = S(i, j, k, n);
         Im(i, j, k, n) =
             sm + (0.5 * sigma) * ((sp - sm) + (1.0 - 2.0 / 3.0 * sigma) * s6);
+    } else {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = S(i, j, k, n);
+    }
+}
+
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE void Godunov_weno_calculate_z(
+    const int i,
+    const int j,
+    const int k,
+    const int n,
+    const amrex::Real v_ad,
+    const amrex::Array4<const amrex::Real>& S,
+    const amrex::Array4<amrex::Real>& Im,
+    const amrex::Array4<amrex::Real>& Ip,
+    const amrex::BCRec& bc,
+    const int domlo,
+    const int domhi,
+    const bool weno_js)
+{
+    using namespace amrex;
+
+    constexpr amrex::Real small_vel = 1e-10;
+
+    amrex::Real sm2 = S(i, j, k - 2, n);
+    amrex::Real sm1 = S(i, j, k - 1, n);
+    amrex::Real s0 = S(i, j, k, n);
+    amrex::Real sp1 = S(i, j, k + 1, n);
+    amrex::Real sp2 = S(i, j, k + 2, n);
+
+    // right of k-1/2
+    amrex::Real sedge1 = weno5(sp2, sp1, s0, sm1, sm2, weno_js); // NOLINT
+    // left of k+1/2
+    amrex::Real sedge2 = weno5(sm2, sm1, s0, sp1, sp2, weno_js); // NOLINT
+
+    amrex::Real sm = sedge1;
+    amrex::Real sp = sedge2;
+
+    Godunov_weno_zbc(
+        i, j, k, n, sm, sp, sedge1, sedge2, S, bc.lo(2), bc.hi(2), domlo,
+        domhi);
+
+    amrex::Real s6 = 6.0 * s0 - 3.0 * (sm + sp);
+
+    if (v_ad > small_vel) {
+        Ip(i, j, k, n) = sp;
+        Im(i, j, k, n) = S(i, j, k, n);
+    } else if (v_ad < -small_vel) {
+        Ip(i, j, k, n) = S(i, j, k, n);
+        Im(i, j, k, n) = sm;
     } else {
         Ip(i, j, k, n) = S(i, j, k, n);
         Im(i, j, k, n) = S(i, j, k, n);

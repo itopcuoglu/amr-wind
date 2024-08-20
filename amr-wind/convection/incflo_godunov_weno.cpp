@@ -46,3 +46,42 @@ void godunov::predict_weno(
                 dhi.z, weno_js);
         });
 }
+
+void godunov::calculate_weno(
+    int lev,
+    Box const& bx,
+    int /* ncomp */,
+    Array4<Real> const& Imx,
+    Array4<Real> const& Ipx,
+    Array4<Real> const& Imy,
+    Array4<Real> const& Ipy,
+    Array4<Real> const& Imz,
+    Array4<Real> const& Ipz,
+    Array4<Real const> const& q,
+    Array4<Real const> const& vel,
+    Vector<Geometry> geom,
+    amrex::Gpu::DeviceVector<amrex::BCRec>& bcrec_device,
+    bool weno_js)
+{
+    BL_PROFILE("amr-wind::godunov::predict_weno");
+    const auto dx = geom[lev].CellSizeArray();
+    const Box& domain = geom[lev].Domain();
+    const Dim3 dlo = amrex::lbound(domain);
+    const Dim3 dhi = amrex::ubound(domain);
+
+    BCRec const* pbc = bcrec_device.data();
+
+    amrex::ParallelFor(
+        bx, AMREX_SPACEDIM,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+            Godunov_weno_calculate_x(
+                i, j, k, n, vel(i, j, k, 0), q, Imx, Ipx, pbc[n], dlo.x, dhi.x,
+                weno_js);
+            Godunov_weno_calculate_y(
+                i, j, k, n, vel(i, j, k, 1), q, Imy, Ipy, pbc[n], dlo.y, dhi.y,
+                weno_js);
+            Godunov_weno_calculate_z(
+                i, j, k, n, vel(i, j, k, 2), q, Imz, Ipz, pbc[n], dlo.z, dhi.z,
+                weno_js);
+        });
+}

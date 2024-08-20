@@ -514,3 +514,193 @@ void godunov::predict_godunov(
         qz(i, j, k) = ltm ? 0. : st;
     });
 }
+
+void godunov::calculate_godunov(
+    int lev,
+    Box const& bx,
+    int ncomp,
+    Box const& xbx,
+    Box const& ybx,
+    Box const& zbx,
+    Array4<Real> const& qx,
+    Array4<Real> const& qy,
+    Array4<Real> const& qz,
+    Array4<Real const> const& q,
+    Array4<Real const> const& u_ad,
+    Array4<Real const> const& v_ad,
+    Array4<Real const> const& w_ad,
+    Array4<Real> const& Imx,
+    Array4<Real> const& Ipx,
+    Array4<Real> const& Imy,
+    Array4<Real> const& Ipy,
+    Array4<Real> const& Imz,
+    Array4<Real> const& Ipz,
+    Array4<Real const> const& f,
+    Real* p,
+    Vector<Geometry> geom,
+    amrex::Gpu::DeviceVector<amrex::BCRec>& bcrec_device)
+{
+    BL_PROFILE("amr-wind::godunov::predict_godunov");
+
+    const Box& domain = geom[lev].Domain();
+    const Dim3 dlo = amrex::lbound(domain);
+    const Dim3 dhi = amrex::ubound(domain);
+    Real dx = geom[lev].CellSize(0);
+    Real dy = geom[lev].CellSize(1);
+    Real dz = geom[lev].CellSize(2);
+
+    BCRec const* pbc = bcrec_device.data();
+
+    Box xebox = Box(bx).grow(1, 1).grow(2, 1).surroundingNodes(0);
+    Box yebox = Box(bx).grow(0, 1).grow(2, 1).surroundingNodes(1);
+    Box zebox = Box(bx).grow(0, 1).grow(1, 1).surroundingNodes(2);
+    Array4<Real> xlo = makeArray4(p, xebox, ncomp);
+    p += xlo.size();
+    Array4<Real> xhi = makeArray4(p, xebox, ncomp);
+    p += xhi.size();
+    Array4<Real> ylo = makeArray4(p, yebox, ncomp);
+    p += ylo.size();
+    Array4<Real> yhi = makeArray4(p, yebox, ncomp);
+    p += yhi.size();
+    Array4<Real> zlo = makeArray4(p, zebox, ncomp);
+    p += zlo.size();
+    Array4<Real> zhi = makeArray4(p, zebox, ncomp);
+    p += zhi.size(); // NOLINT: Value not read warning
+
+    amrex::ParallelFor(
+        xebox, ncomp,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+            Real lo, hi;
+
+            lo = Ipx(i - 1, j, k, n);
+            hi = Imx(i, j, k, n);
+
+            Real uad = u_ad(i, j, k);
+            auto bc = pbc[n];
+
+            Godunov_trans_xbc(
+                i, j, k, n, q, lo, hi, uad, bc.lo(0), bc.hi(0), dlo.x, dhi.x);
+
+            xlo(i, j, k, n) = lo;
+            xhi(i, j, k, n) = hi;
+
+            constexpr Real small_vel = 1e-10;
+
+            Real st = (uad >= 0.) ? lo : hi;
+            Real fu = (std::abs(uad) < small_vel) ? 0.0 : 1.0;
+            Imx(i, j, k, n) =
+                fu * st + (1.0 - fu) * 0.5 * (hi + lo); // store xedge
+        },
+        yebox, ncomp,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+            Real lo, hi;
+
+            lo = Ipy(i, j - 1, k, n);
+            hi = Imy(i, j, k, n);
+
+            Real vad = v_ad(i, j, k);
+            auto bc = pbc[n];
+
+            Godunov_trans_ybc(
+                i, j, k, n, q, lo, hi, vad, bc.lo(1), bc.hi(1), dlo.y, dhi.y);
+
+            ylo(i, j, k, n) = lo;
+            yhi(i, j, k, n) = hi;
+
+            constexpr Real small_vel = 1e-10;
+
+            Real st = (vad >= 0.) ? lo : hi;
+            Real fu = (std::abs(vad) < small_vel) ? 0.0 : 1.0;
+            Imy(i, j, k, n) =
+                fu * st + (1.0 - fu) * 0.5 * (hi + lo); // store yedge
+        },
+        zebox, ncomp,
+        [=] AMREX_GPU_DEVICE(int i, int j, int k, int n) noexcept {
+            Real lo, hi;
+
+            lo = Ipz(i, j, k - 1, n);
+            hi = Imz(i, j, k, n);
+
+            Real wad = w_ad(i, j, k);
+            auto bc = pbc[n];
+
+            Godunov_trans_zbc(
+                i, j, k, n, q, lo, hi, wad, bc.lo(2), bc.hi(2), dlo.z, dhi.z);
+
+            zlo(i, j, k, n) = lo;
+            zhi(i, j, k, n) = hi;
+
+            constexpr Real small_vel = 1e-10;
+
+            Real st = (wad >= 0.) ? lo : hi;
+            Real fu = (std::abs(wad) < small_vel) ? 0.0 : 1.0;
+            Imz(i, j, k, n) =
+                fu * st + (1.0 - fu) * 0.5 * (hi + lo); // store zedge
+        });
+
+    Array4<Real> xedge = Imx;
+    Array4<Real> yedge = Imy;
+    Array4<Real> zedge = Imz;
+
+    // We can reuse the space in Ipy and Ipz.
+
+    //
+    // X-Flux
+    //
+    //
+    amrex::ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        constexpr int n = 0;
+        auto bc = pbc[n];
+        Real stl = xlo(i, j, k, n);
+        Real sth = xhi(i, j, k, n);
+        Godunov_cc_xbc_lo(i, j, k, n, q, stl, sth, u_ad, bc.lo(0), dlo.x);
+        Godunov_cc_xbc_hi(i, j, k, n, q, stl, sth, u_ad, bc.hi(0), dhi.x);
+
+        constexpr Real small_vel = 1.e-10;
+
+        Real st = ((stl + sth) >= 0.) ? stl : sth;
+        bool ltm =
+            ((stl <= 0. && sth >= 0.) || (std::abs(stl + sth) < small_vel));
+        qx(i, j, k) = ltm ? 0. : st;
+    });
+
+    //
+    // Y-Flux
+    //
+    amrex::ParallelFor(ybx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        constexpr int n = 1;
+        auto bc = pbc[n];
+        Real stl = ylo(i, j, k, n);
+        Real sth = yhi(i, j, k, n);
+
+        Godunov_cc_ybc_lo(i, j, k, n, q, stl, sth, v_ad, bc.lo(1), dlo.y);
+        Godunov_cc_ybc_hi(i, j, k, n, q, stl, sth, v_ad, bc.hi(1), dhi.y);
+
+        constexpr Real small_vel = 1.e-10;
+
+        Real st = ((stl + sth) >= 0.) ? stl : sth;
+        bool ltm =
+            ((stl <= 0. && sth >= 0.) || (std::abs(stl + sth) < small_vel));
+        qy(i, j, k) = ltm ? 0. : st;
+    });
+
+    //
+    // Z-Flux
+    //
+    amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
+        constexpr int n = 2;
+        auto bc = pbc[n];
+        Real stl = zlo(i, j, k, n);
+        Real sth = zhi(i, j, k, n);
+
+        Godunov_cc_zbc_lo(i, j, k, n, q, stl, sth, w_ad, bc.lo(2), dlo.z);
+        Godunov_cc_zbc_hi(i, j, k, n, q, stl, sth, w_ad, bc.hi(2), dhi.z);
+
+        constexpr Real small_vel = 1.e-10;
+
+        Real st = ((stl + sth) >= 0.) ? stl : sth;
+        bool ltm =
+            ((stl <= 0. && sth >= 0.) || (std::abs(stl + sth) < small_vel));
+        qz(i, j, k) = ltm ? 0. : st;
+    });
+}
