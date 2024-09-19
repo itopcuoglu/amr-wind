@@ -191,7 +191,6 @@ void TiogaInterface::register_solution(
     // Store field variable names for use in update_solution step
     m_cell_vars = cell_vars;
     m_node_vars = node_vars;
-
     // Move cell variables into scratch field
     {
         int icomp = 0;
@@ -199,6 +198,7 @@ void TiogaInterface::register_solution(
             auto& fld = repo.get_field(cvar);
             const int ncomp = fld.num_comp();
             fld.fillpatch(m_sim.time().new_time());
+            AMREX_ALWAYS_ASSERT(amrex::IntVect(num_ghost) == fld.num_grow());
             field_ops::copy(*m_qcell, fld, 0, icomp, ncomp, num_ghost);
             icomp += ncomp;
         }
