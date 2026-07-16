@@ -1,0 +1,14 @@
+.. meta::6242007d3f8a3927ba862bc54c3a521a74d37e9b6deee75f2870778e0892784c3d487edad89e3d125ba3d52f8e88aba5e0ca9921c4ad7a491be8f0f2ceea7217
+
+:orphan:
+
+.. title:: Kynema-SGF API: Class Members - Functions
+
+Class Members - Functions
+=========================
+
+.. container:: doxygen-content
+
+   
+   .. raw:: html
+     :file: functions_func_o.html

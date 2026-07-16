@@ -1,0 +1,14 @@
+.. meta::36c3c59e8210e68dfbe649e50428de4e8db6437e56c5a5c2a11a8ad0055791b12bd745ffc16f1693432f419f0ceee1972193d65174edbd769ea82ad3c0efcbea
+
+:orphan:
+
+.. title:: Kynema-SGF API: /home/runner/work/kynema-sgf/kynema-sgf/src/physics/multiphase/ChannelBuilder.H Source File
+
+/home/runner/work/kynema-sgf/kynema-sgf/src/physics/multiphase/ChannelBuilder.H Source File
+===========================================================================================
+
+.. container:: doxygen-content
+
+   
+   .. raw:: html
+     :file: _channel_builder_8_h_source.html

@@ -1,0 +1,14 @@
+.. meta::28928f12eb068532877a94e35991948e1b1bc1270f405e1c61857a4e323bb9c05a82218c61441b78dad0bae51259e2eb58bb903765ff7b754295342ec88b09b5
+
+:orphan:
+
+.. title:: Kynema-SGF API: /home/runner/work/kynema-sgf/kynema-sgf/src -&gt; core Relation
+
+/home/runner/work/kynema-sgf/kynema-sgf/src -&gt; core Relation
+===============================================================
+
+.. container:: doxygen-content
+
+   
+   .. raw:: html
+     :file: dir_000045_000007.html
