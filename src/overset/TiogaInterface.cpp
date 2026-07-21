@@ -270,31 +270,34 @@ void TiogaInterface::update_solution()
     {
 
         //  2nd Order Extrapolation loop for cell variables at fringes
-        auto& ibcell = m_sim.repo().get_int_field("iblank_cell");
-        for (const auto& cvar : m_cell_vars) {
-            const auto& fld_nm1 =
-                repo.get_field(cvar).state(kynema_sgf::FieldState::Old);
-            auto& fld_n = repo.get_field(cvar);
-            const int ncomp = fld_n.num_comp();
+        if (m_sim.time().time_index() > 0) {
+            auto& ibcell = m_sim.repo().get_int_field("iblank_cell");
+            for (const auto& cvar : m_cell_vars) {
+                const auto& fld_nm1 =
+                    repo.get_field(cvar).state(kynema_sgf::FieldState::Old);
+                auto& fld_n = repo.get_field(cvar);
+                const int ncomp = fld_n.num_comp();
 
-            const int nlevels = repo.num_active_levels();
-            for (int lev = 0; lev < nlevels; ++lev) {
-                const auto& ibl = ibcell(lev);
-                const auto& ibarrs = ibl.const_arrays();
+                const int nlevels = repo.num_active_levels();
+                for (int lev = 0; lev < nlevels; ++lev) {
+                    const auto& ibl = ibcell(lev);
+                    const auto& ibarrs = ibl.const_arrays();
 
-                const auto& fldnm1_arr = fld_nm1(lev).const_arrays();
-                const auto& fldn_arr = fld_n(lev).arrays();
+                    const auto& fldnm1_arr = fld_nm1(lev).const_arrays();
+                    const auto& fldn_arr = fld_n(lev).arrays();
 
-                amrex::ParallelFor(
-                    ibl, [=] AMREX_GPU_DEVICE(int nbx, int i, int j, int k) {
-                        if (ibarrs[nbx](i, j, k) == -1) {
-                            for (int comp = 0; comp < ncomp; ++comp) {
-                                fldn_arr[nbx](i, j, k) =
-                                    2 * fldn_arr[nbx](i, j, k, comp) -
-                                    fldnm1_arr[nbx](i, j, k, comp);
+                    amrex::ParallelFor(
+                        ibl,
+                        [=] AMREX_GPU_DEVICE(int nbx, int i, int j, int k) {
+                            if (ibarrs[nbx](i, j, k) == -1) {
+                                for (int comp = 0; comp < ncomp; ++comp) {
+                                    fldn_arr[nbx](i, j, k) =
+                                        2 * fldn_arr[nbx](i, j, k, comp) -
+                                        fldnm1_arr[nbx](i, j, k, comp);
+                                }
                             }
-                        }
-                    });
+                        });
+                }
             }
         }
     }
@@ -316,32 +319,35 @@ void TiogaInterface::update_solution()
     }
 
     {
-        //  2nd Order Extrapolation loop for node variables at fringes
-        auto& ibnode = m_sim.repo().get_int_field("iblank_node");
-        for (const auto& cvar : m_node_vars) {
-            auto& fld_nm1 =
-                repo.get_field(cvar).state(kynema_sgf::FieldState::Old);
-            auto& fld_n = repo.get_field(cvar);
-            const int ncomp = fld_n.num_comp();
+        if (m_sim.time().time_index() > 0) {
+            //  2nd Order Extrapolation loop for node variables at fringes
+            auto& ibnode = m_sim.repo().get_int_field("iblank_node");
+            for (const auto& cvar : m_node_vars) {
+                auto& fld_nm1 =
+                    repo.get_field(cvar).state(kynema_sgf::FieldState::Old);
+                auto& fld_n = repo.get_field(cvar);
+                const int ncomp = fld_n.num_comp();
 
-            const int nlevels = repo.num_active_levels();
-            for (int lev = 0; lev < nlevels; ++lev) {
-                const auto& ibln = ibnode(lev);
-                const auto& ibnarrs = ibln.const_arrays();
+                const int nlevels = repo.num_active_levels();
+                for (int lev = 0; lev < nlevels; ++lev) {
+                    const auto& ibln = ibnode(lev);
+                    const auto& ibnarrs = ibln.const_arrays();
 
-                const auto& fldnm1_arr = fld_nm1(lev).const_arrays();
-                const auto& fldn_arr = fld_n(lev).arrays();
+                    const auto& fldnm1_arr = fld_nm1(lev).const_arrays();
+                    const auto& fldn_arr = fld_n(lev).arrays();
 
-                amrex::ParallelFor(
-                    ibln, [=] AMREX_GPU_DEVICE(int nbx, int i, int j, int k) {
-                        if (ibnarrs[nbx](i, j, k) == -1) {
-                            for (int comp = 0; comp < ncomp; ++comp) {
-                                fldn_arr[nbx](i, j, k) =
-                                    2 * fldn_arr[nbx](i, j, k, comp) -
-                                    fldnm1_arr[nbx](i, j, k, comp);
+                    amrex::ParallelFor(
+                        ibln,
+                        [=] AMREX_GPU_DEVICE(int nbx, int i, int j, int k) {
+                            if (ibnarrs[nbx](i, j, k) == -1) {
+                                for (int comp = 0; comp < ncomp; ++comp) {
+                                    fldn_arr[nbx](i, j, k) =
+                                        2 * fldn_arr[nbx](i, j, k, comp) -
+                                        fldnm1_arr[nbx](i, j, k, comp);
+                                }
                             }
-                        }
-                    });
+                        });
+                }
             }
         }
     }
